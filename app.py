@@ -380,7 +380,7 @@ else:
 
             st.code(error_text)
 
-                finally:
+        finally:
             if client is not None:
                 try:
                     client.close()

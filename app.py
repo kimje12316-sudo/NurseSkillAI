@@ -18,8 +18,8 @@ st.set_page_config(
 # 앞에서부터 순서대로 시도합니다. 503/429/404가 나면 다음 모델로 넘어갑니다.
 # 모델명은 Google AI Studio에서 현재 사용 가능한지 확인하세요.
 MODEL_CANDIDATES = [
+    "gemini-3.8-flash",
     "gemini-3.7-flash",
-    "gemini-2.5-flash",
 ]
 
 # 인라인 전송은 요청 전체 크기 제한이 있습니다(20MB 안팎으로 알고 있음).
@@ -120,6 +120,7 @@ def should_try_next_model(text: str) -> bool:
 def analyze_with_fallback(client, video_part, status=None):
     """모델 후보를 순서대로 시도하고 (응답, 사용한 모델명)을 돌려줍니다."""
     last_error = None
+    busy_error = None  # 503 오류는 원인 파악에 더 유용하므로 따로 보관
 
     for model in MODEL_CANDIDATES:
         for attempt in range(3):
@@ -143,6 +144,7 @@ def analyze_with_fallback(client, video_part, status=None):
                 text = str(e)
 
                 if is_retryable_busy(text):
+                    busy_error = e
                     time.sleep(5 * (attempt + 1))  # 5초, 10초, 15초
                     continue
 
@@ -154,7 +156,7 @@ def analyze_with_fallback(client, video_part, status=None):
         if status is not None:
             status.write(f"{model} 사용 불가 → 다음 모델로 전환합니다.")
 
-    raise last_error
+    raise busy_error or last_error
 
 
 def parse_result(raw_text: str) -> dict:

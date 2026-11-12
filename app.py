@@ -196,82 +196,32 @@ else:
                 http_options=http_options
             )
 
-            # 3) 업로드 영상 임시 파일 저장
-            suffix = Path(video.name).suffix.lower()
 
-            with tempfile.NamedTemporaryFile(
-                delete=False,
-                suffix=suffix
-            ) as temp_file:
-
-                temp_file.write(video.getbuffer())
-                temp_path = temp_file.name
-
-            # 4) 분석 진행 상태 표시
+            # 3) 작은 MP4 영상을 인라인 방식으로 준비
             analysis_status = st.status(
                 "Gemini AI 분석을 준비하고 있습니다.",
                 expanded=True
             )
 
-            analysis_status.write("① 영상 파일 업로드 중...")
+            analysis_status.write("① 영상 데이터 확인 중...")
 
-            uploaded_file = client.files.upload(
-                file=temp_path
+            video_bytes = video.getvalue()
+
+            video_part = types.Part.from_bytes(
+                data=video_bytes,
+                mime_type="video/mp4"
             )
 
-            analysis_status.write("② 영상 업로드 완료.")
-            analysis_status.write("③ 영상 처리 상태 확인 중...")
+            analysis_status.write("② 영상 데이터 준비 완료.")
+            analysis_status.write("③ Gemini AI 분석 요청 중...")
 
-            # 5) 영상 처리 상태 확인
-            start_time = time.time()
-            max_wait_time = 180
-
-            while True:
-
-                state = uploaded_file.state
-
-                state_name = (
-                    state.name if state is not None
-                    else "UNKNOWN"
-                )
-
-                if state_name == "ACTIVE":
-                    break
-
-                if state_name == "FAILED":
-                    raise RuntimeError(
-                        "Gemini에서 영상 파일 처리에 실패했습니다."
-                    )
-
-                elapsed = int(time.time() - start_time)
-
-                if elapsed > max_wait_time:
-                    raise TimeoutError(
-                        "영상 처리 시간이 3분을 초과했습니다. "
-                        "더 짧은 영상으로 다시 시도하세요."
-                    )
-
-                analysis_status.update(
-                    label=f"영상 처리 중... ({elapsed}초)",
-                    state="running"
-                )
-
-                time.sleep(5)
-
-                uploaded_file = client.files.get(
-                    name=uploaded_file.name
-                )
-
-            analysis_status.write("④ 영상 처리 완료.")
-            analysis_status.write("⑤ Gemini AI 분석 요청 중...")
-
-            # 6) 손 위생 분석 프롬프트
+            # 4) 분석 프롬프트
             prompt = """
 당신은 간호술기 교육을 보조하는 영상 관찰 AI입니다.
 
 업로드된 영상은 손 위생 수행 영상입니다.
 
-다음 6개 항목을 중심으로 영상을 관찰하세요.
+다음 6개 항목을 관찰하세요.
 
 1. 손바닥을 서로 문지르기
 2. 손등을 서로 문지르기
@@ -280,44 +230,38 @@ else:
 5. 엄지손가락 문지르기
 6. 손끝과 손톱 밑 문지르기
 
-각 항목은 다음 세 가지 중 하나로 구분하세요.
+각 항목은 다음 중 하나로 구분하세요.
 
-- 관찰됨: 해당 동작을 영상에서 확인할 수 있음
-- 관찰되지 않음: 손이 충분히 보이지만 해당 동작을
-  수행하는 장면을 확인하지 못함
-- 확인 불가: 손이 가려지거나 화면 밖에 있어 판단할 수 없음
+- 관찰됨
+- 관찰되지 않음
+- 확인 불가
 
 다음 형식으로 한국어 결과를 작성하세요.
 
 [영상 전체 관찰]
-영상에서 확인되는 손 위생 수행 과정을 설명하세요.
+확인 가능한 손 위생 수행 과정
 
 [항목별 분석]
-각 6개 항목에 대해 다음을 작성하세요.
-- 항목명
-- 판정
-- 판단 근거
-- 해당 장면의 대략적인 시간(확인 가능한 경우)
+각 항목의 판정, 판단 근거, 대략적인 시간
 
 [개선 피드백]
-영상에서 실제로 확인된 부분에 대해서만 개선점을 제시하세요.
+실제 영상에서 확인된 내용에 한해 개선점 제시
 
 [분석의 한계]
-영상만으로 판단할 수 없는 내용과 불확실한 내용을 설명하세요.
+영상만으로 판단할 수 없는 내용 설명
 
-중요한 주의사항:
-- 영상에 보이지 않는 행동을 임의로 추측하지 마세요.
-- 미생물이 제거되었는지 판단하지 마세요.
-- 소독제 사용량이나 성분을 영상만으로 단정하지 마세요.
+주의사항:
+- 보이지 않는 행동을 추측하지 마세요.
+- 미생물 제거 여부를 판단하지 마세요.
+- 소독제 사용량이나 성분을 단정하지 마세요.
 - 관찰되지 않음과 확인 불가를 구분하세요.
-- 영상은 약 1초 간격으로 샘플링될 수 있으므로
-  빠른 동작을 놓칠 수 있다는 점을 고려하세요.
-- 이 결과는 교육용 보조 분석이며 최종 평가는 교수자가 해야 합니다.
+- 빠른 동작은 영상 샘플링 과정에서 놓칠 수 있습니다.
+- 최종 평가는 교수자가 해야 합니다.
 """
 
-            # 7) Gemini 스트리밍 분석
+            # 5) Gemini 스트리밍 분석
             analysis_status.write(
-                "⑥ AI가 영상 내용을 분석하고 있습니다."
+                "④ Gemini가 영상을 분석하고 있습니다."
             )
 
             result_placeholder = st.empty()
@@ -326,7 +270,7 @@ else:
             response_stream = client.models.generate_content_stream(
                 model=MODEL_NAME,
                 contents=[
-                    uploaded_file,
+                    video_part,
                     prompt
                 ],
                 config=types.GenerateContentConfig(
@@ -334,6 +278,26 @@ else:
                     max_output_tokens=1800
                 )
             )
+
+            for chunk in response_stream:
+                if chunk.text:
+                    full_text += chunk.text
+                    result_placeholder.markdown(full_text)
+
+            if not full_text.strip():
+                raise RuntimeError(
+                    "Gemini가 분석 결과를 반환하지 않았습니다."
+                )
+
+            analysis_status.update(
+                label="Gemini AI 영상 분석 완료!",
+                state="complete"
+            )
+
+            st.success("AI 영상 분석이 완료되었습니다.")
+            st.subheader("AI 영상 분석 결과")
+            st.markdown(full_text)
+
 
             for chunk in response_stream:
 
@@ -416,15 +380,10 @@ else:
 
             st.code(error_text)
 
-        finally:
-
-            # 8) Gemini 임시 파일 삭제
-            if uploaded_file is not None and client is not None:
-
+                finally:
+            if client is not None:
                 try:
-                    client.files.delete(
-                        name=uploaded_file.name
-                    )
+                    client.close()
                 except Exception:
                     pass
 

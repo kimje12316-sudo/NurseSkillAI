@@ -17,7 +17,7 @@ st.set_page_config(
     layout="centered"
 )
 
-MODEL_NAME = "gemini-3.8-flash"
+MODEL_NAME = "gemini-3.7-flash"
 
 st.title("🩺 Nurse Skill AI")
 st.subheader("AI 기반 간호술기 수행 분석 시스템")

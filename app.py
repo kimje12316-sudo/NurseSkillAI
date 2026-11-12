@@ -176,15 +176,15 @@ else:
             # 2) Gemini 클라이언트 생성
             # 요청당 120초 제한
             # 일시적인 서버 오류는 SDK가 자동 재시도
-            retry_options = types.HttpRetryOptions(
-                attempts=3,
-                initial_delay=2.0,
-                max_delay=8.0,
-                exp_base=2.0,
-                http_status_codes=[
-                    408, 429, 500, 502, 503, 504
-                ]
-            )
+           retry_options = types.HttpRetryOptions(
+               attempts=5,
+               initial_delay=2.0,
+               max_delay=30.0,
+               exp_base=2.0,
+               http_status_codes=[
+                   408, 429, 500, 502, 503, 504
+               ]
+           )
 
             http_options = types.HttpOptions(
                 timeout=120000,
